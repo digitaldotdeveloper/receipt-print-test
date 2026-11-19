@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1013">
+<title>Receipt Print Test</title>
+<style>
+  :root { --bg:#f4f3ef; --card:#fff; --ink:#14161a; --mute:#666c76; --line:#e3e1da; --accent:#14161a; --on:#fff; --ok:#1c7c45; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1013; --card:#171a1f; --ink:#f1f1ee; --mute:#9aa1ab; --line:#2a2e35; --accent:#f1f1ee; --on:#14161a; --ok:#58d68d; --bad:#ff8a80; }
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; -webkit-text-size-adjust:100%; }
+  main { max-width:480px; margin:0 auto; padding:20px 16px calc(150px + env(safe-area-inset-bottom)); }
+  .eyebrow { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--mute); margin:6px 0; }
+  h1 { font-size:30px; line-height:1.1; letter-spacing:-.02em; margin:0 0 16px; }
+  .paper { background:#fff; border-radius:6px; padding:10px 10px 18px; box-shadow:0 1px 0 var(--line), 0 18px 40px -22px rgba(0,0,0,.45); }
+  .paper canvas { display:block; width:100%; height:auto; }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line); padding:12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .bar .in { max-width:480px; margin:0 auto; }
+  .go { width:100%; border:0; border-radius:14px; background:var(--accent); color:var(--on); font:inherit; font-weight:600; font-size:18px; min-height:56px; }
+  .go:disabled { opacity:.5; }
+  #hint { font-size:14px; color:var(--mute); margin:8px 2px 0; min-height:20px; text-align:center; }
+  #hint.ok { color:var(--ok); } #hint.bad { color:var(--bad); }
+  .alt { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-top:6px; }
+  .alt button { border:0; background:none; color:var(--mute); font:inherit; font-size:13px; text-decoration:underline; padding:6px 2px; min-height:32px; }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">80 mm receipt printer</p>
+  <h1>Receipt print test</h1>
+  <div class="paper"><canvas id="receipt" width="576" height="10"></canvas></div>
+</main>
+
+<div class="bar"><div class="in">
+  <button class="go" id="go" disabled>Print receipt</button>
+  <div id="hint"></div>
+  <div class="alt" id="alt"></div>
+</div></div>
+
+<script>
+const W = 576, BAND = 240;
+const $ = (id) => document.getElementById(id);
+const ua = navigator.userAgent;
+const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isAndroid = /Android/.test(ua);
+
+const ITEMS = [['Sample item A', 12.00], ['Sample item B', 7.50], ['Sample item C x2', 30.00]];
+const money = (n) => n.toFixed(2);
+const stamp = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '  ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); };
+let ticket = 0;
+
+// ---- draw the receipt (same picture goes to both platforms) ----
+function draw() {
+  ticket = Math.floor(1000 + Math.random() * 9000);
+  const c = $('receipt'), F = '"Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif';
+  const rows = [];
+  const add = (h, fn) => rows.push([h, fn]);
+  const text = (s, size, weight, align) => add(Math.round(size * 1.4), (ctx, y) => {
+    ctx.font = weight + ' ' + size + 'px ' + F; ctx.textAlign = align;
+    ctx.fillText(s, align === 'center' ? W / 2 : align === 'right' ? W - 12 : 12, y);
+  });
+  const pair = (l, r, size, weight) => add(Math.round(size * 1.5), (ctx, y) => {
+    ctx.font = weight + ' ' + size + 'px ' + F;
+    ctx.textAlign = 'left'; ctx.fillText(l, 12, y); ctx.textAlign = 'right'; ctx.fillText(r, W - 12, y);
+  });
+  const rule = () => add(26, (ctx, y) => { ctx.setLineDash([10, 7]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(12, y + 12); ctx.lineTo(W - 12, y + 12); ctx.stroke(); ctx.setLineDash([]); });
+  const gap = (h) => add(h, () => {});
+
+  gap(14);
+  text('TEST RECEIPT', 50, '800', 'center');
+  text('Printed from a phone', 26, '500', 'center');
+  gap(6); rule();
+  pair('Date', stamp(), 26, '500');
+  pair('Receipt no.', '#' + ticket, 26, '500');
+  rule();
+  let total = 0;
+  for (const [name, price] of ITEMS) { pair(name, money(price), 28, '500'); total += price; }
+  rule();
+  pair('TOTAL', money(total), 40, '800');
+  rule(); gap(6);
+  text('If you can read this,', 26, '500', 'center');
+  text('phone printing works.', 26, '500', 'center');
+  gap(20);
+
+  c.height = rows.reduce((s, r) => s + r[0], 0);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, c.height);
+  ctx.fillStyle = '#000'; ctx.strokeStyle = '#000'; ctx.textBaseline = 'top';
+  let y = 0; for (const [h, fn] of rows) { fn(ctx, y); y += h; }
+  return c;
+}
+
+// ---- canvas -> 1-bit rows (and repaint so the preview and the PNG are pure black/white) ----
+function mono(c) {
+  const w = c.width, h = c.height, ctx = c.getContext('2d'), img = ctx.getImageData(0, 0, w, h), d = img.data;
+  const bw = w >> 3, bytes = new Uint8Array(bw * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const p = (y * w + x) * 4, black = (0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]) < 150;
+    if (black) bytes[y * bw + (x >> 3)] |= 0x80 >> (x & 7);
+    d[p] = d[p + 1] = d[p + 2] = black ? 0 : 255; d[p + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return { bytes, bw, h };
+}
+
+function escposRaster(m) {
+  const parts = [Uint8Array.of(0x1B, 0x40)];
+  for (let y = 0; y < m.h; y += BAND) {
+    const n = Math.min(BAND, m.h - y);
+    parts.push(Uint8Array.of(0x1D, 0x76, 0x30, 0, m.bw & 255, m.bw >> 8, n & 255, n >> 8), m.bytes.subarray(y * m.bw, (y + n) * m.bw));
+  }
+  parts.push(Uint8Array.of(0x1B, 0x64, 3, 0x1D, 0x56, 0x42, 0));
+  return join(parts);
+}
+
+function escposText() {            // plain printer-font version, a few hundred bytes
+  const enc = (s) => Uint8Array.from(s, (ch) => ch.charCodeAt(0) & 0x7F);
+  const cols = 48, line = (l, r) => l + ' '.repeat(Math.max(1, cols - l.length - r.length)) + r + '\n', dash = '-'.repeat(cols) + '\n';
+  let total = 0, body = '';
+  for (const [n, p] of ITEMS) { body += line(n, money(p)); total += p; }
+  return join([
+    Uint8Array.of(0x1B, 0x40, 0x1B, 0x61, 1, 0x1D, 0x21, 0x11), enc('TEST RECEIPT\n'),
+    Uint8Array.of(0x1D, 0x21, 0), enc('Printed from a phone\n'),
+    Uint8Array.of(0x1B, 0x61, 0), enc(dash + line('Date', stamp()) + line('Receipt no.', '#' + ticket) + dash + body + dash),
+    Uint8Array.of(0x1B, 0x45, 1), enc(line('TOTAL', money(total))), Uint8Array.of(0x1B, 0x45, 0),
+    enc(dash), Uint8Array.of(0x1B, 0x61, 1), enc('If you can read this,\nphone printing works.\n'),
+    Uint8Array.of(0x1B, 0x64, 4, 0x1D, 0x56, 0x42, 0)
+  ]);
+}
+
+function join(parts) { const out = new Uint8Array(parts.reduce((s, p) => s + p.length, 0)); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; } return out; }
+function b64(bytes) { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); }
+
+// ---- prepare everything up front so the tap itself does the printing ----
+let ready = { raster: '', png: null };
+function prepare() {
+  const c = draw(), m = mono(c);
+  ready.raster = b64(escposRaster(m));
+  ready.png = null;
+  c.toBlob((blob) => { ready.png = new File([blob], 'receipt-' + ticket + '.png', { type: 'image/png' }); $('go').disabled = false; }, 'image/png');
+}
+
+function say(msg, cls) { $('hint').textContent = msg; $('hint').className = cls || ''; }
+
+function viaRawBT(base64) {         // Android: hands the job to the RawBT app, which prints it
+  say('Sent to RawBT.', 'ok');
+  location.href = 'rawbt:base64,' + base64;
+  setTimeout(prepare, 1500);
+}
+
+async function viaShare() {         // iPhone: share sheet -> pick the printer app
+  if (!ready.png || !navigator.canShare || !navigator.canShare({ files: [ready.png] })) {
+    say('This browser cannot share files. Press and hold the receipt, save it, then open it in your printer app.', 'bad'); return;
+  }
+  try { await navigator.share({ files: [ready.png] }); say('Shared. Finish in your printer app.', 'ok'); prepare(); }
+  catch (e) { if (e.name !== 'AbortError') say('Sharing failed: ' + e.message, 'bad'); else say(defaultHint); }
+}
+
+let defaultHint = '';
+function altButton(label, fn) { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.addEventListener('click', fn); $('alt').appendChild(b); }
+
+if (isAndroid) {
+  defaultHint = 'One tap: opens RawBT and prints.';
+  $('go').addEventListener('click', () => viaRawBT(ready.raster));
+  altButton('Not printing? Try text mode', () => viaRawBT(b64(escposText())));
+  altButton('Share as image instead', viaShare);
+} else if (isIOS) {
+  defaultHint = 'Tap, then choose your printer app in the share sheet.';
+  $('go').addEventListener('click', viaShare);
+} else {
+  defaultHint = 'Open this page on a phone to print. This is the preview.';
+  $('go').addEventListener('click', viaShare);
+  altButton('Send to RawBT (Android)', () => viaRawBT(ready.raster));
+}
+say(defaultHint);
+prepare();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) prepare(); });
+</script>
+</body>
+</html>
